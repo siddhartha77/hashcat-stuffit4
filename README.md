@@ -3,7 +3,7 @@ hashcat kernel for StuffIt4 archives
 
 ## Usage
 
-Single hash and mode 0 only for now. Password is 'hashcat':
+Single hash and mode 0 only for now. Password is _hashcat_:
 
 hashcat.exe -m 90337 -a 0 d1383d6ddcb2e9af wordlists\weakpass_3w
 
