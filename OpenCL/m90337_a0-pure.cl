@@ -49,7 +49,7 @@
 
 typedef struct StuffItDESKeySchedule
 {
-	u32 subKeys[16][2];
+	u32a subKeys[16][2];
 } StuffItDESKeySchedule;
 
 const u8 c_BitReverseTable256[] =
@@ -316,40 +316,27 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_RULES ())
         s_SPtrans[7][i] = c_SPtrans[7][i];
     }
     
-    StuffItDESKeySchedule initKeySchedule;
-    
-    initKeySchedule.subKeys[0][0] = 0x2c581460;
-    initKeySchedule.subKeys[0][1] = 0x904c7ca0;
-    initKeySchedule.subKeys[1][0] = 0x1cf8b450;
-    initKeySchedule.subKeys[1][1] = 0x58c0f068;
-    initKeySchedule.subKeys[2][0] = 0x3cc48c70;
-    initKeySchedule.subKeys[2][1] = 0xd42808e4;
-    initKeySchedule.subKeys[3][0] = 0x00e4ac48;
-    initKeySchedule.subKeys[3][1] = 0x3ca4841c;
-    initKeySchedule.subKeys[4][0] = 0xa0d49ce8;
-    initKeySchedule.subKeys[4][1] = 0xb06c4c90;
-    initKeySchedule.subKeys[5][0] = 0x90347cd8;
-    initKeySchedule.subKeys[5][1] = 0x78e0c058;
-    initKeySchedule.subKeys[6][0] = 0xb00c40f8;
-    initKeySchedule.subKeys[6][1] = 0xf41828d4;
-    initKeySchedule.subKeys[7][0] = 0x882c60c4;
-    initKeySchedule.subKeys[7][1] = 0x0c94a43c;
-    initKeySchedule.subKeys[8][0] = 0x681c5024;
-    initKeySchedule.subKeys[8][1] = 0x805c6cb0;
-    initKeySchedule.subKeys[9][0] = 0x58bcf014;
-    initKeySchedule.subKeys[9][1] = 0x48d0e078;
-    initKeySchedule.subKeys[10][0] = 0x7880c834;
-    initKeySchedule.subKeys[10][1] = 0xc43818f4;
-    initKeySchedule.subKeys[11][0] = 0x44a0e80c;
-    initKeySchedule.subKeys[11][1] = 0x2cb4940c;
-    initKeySchedule.subKeys[12][0] = 0xe490d8ac;
-    initKeySchedule.subKeys[12][1] = 0xa07c5c80;
-    initKeySchedule.subKeys[13][0] = 0xd470389c;
-    initKeySchedule.subKeys[13][1] = 0x68f0d048;
-    initKeySchedule.subKeys[14][0] = 0xf44804bc;
-    initKeySchedule.subKeys[14][1] = 0xe40838c4;
-    initKeySchedule.subKeys[15][0] = 0xcc682480;
-    initKeySchedule.subKeys[15][1] = 0x1c84b42c;
+    struct StuffItDESKeySchedule initialKeySchedule =
+    {
+        {
+            {0x2c581460, 0x904c7ca0},
+            {0x1cf8b450, 0x58c0f068},
+            {0x3cc48c70, 0xd42808e4},
+            {0x00e4ac48, 0x3ca4841c},
+            {0xa0d49ce8, 0xb06c4c90},
+            {0x90347cd8, 0x78e0c058},
+            {0xb00c40f8, 0xf41828d4},
+            {0x882c60c4, 0x0c94a43c},
+            {0x681c5024, 0x805c6cb0},
+            {0x58bcf014, 0x48d0e078},
+            {0x7880c834, 0xc43818f4},
+            {0x44a0e80c, 0x2cb4940c},
+            {0xe490d8ac, 0xa07c5c80},
+            {0xd470389c, 0x68f0d048},
+            {0xf44804bc, 0xe40838c4},
+            {0xcc682480, 0x1c84b42c}
+        }
+    };
 
     SYNC_THREADS ();
 
@@ -378,7 +365,7 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_RULES ())
                 data[1] = BYTE_SWAP_U32(tmp.i[i + 1]) ^ IKEY2;
             }
             
-            StuffItDESCrypt(data, &initKeySchedule, 1);
+            StuffItDESCrypt(data, &initialKeySchedule, 1);
         }
            
         StuffItDESKeySchedule keySchedule;
