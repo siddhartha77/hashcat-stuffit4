@@ -3,8 +3,6 @@
  * License.....: MIT
  */
 
-//#define NEW_SIMD_CODE
-
 #ifdef KERNEL_STATIC
 #include "inc_vendor.h"
 #include "inc_types.h"
@@ -15,17 +13,47 @@
 #include "inc_simd.cl"
 #endif
 
-#define BYTE_SWAP_U32(n) (((n>>24)&0xff) | ((n<<8)&0xff0000) | ((n>>8)&0xff00) | ((n<<24)&0xff000000))
-#define MAKE_U64(n,m) ((n << 32) | (m & 0xffffffff))
-#define NIBBLE(a, n) ((a >> (60 - ((n & 0x0f) << 2))) & 0x0f)
-#define REVERSE_BITS(n) ((BitReverseTable256[n & 0xff] << 24) | (BitReverseTable256[(n >> 8) & 0xff] << 16) | (BitReverseTable256[(n >> 16) & 0xff] << 8) | (BitReverseTable256[(n >> 24) & 0xff]))
-#define ENCRYPT(l, r, k) (l ^= c_SPtrans[0][((r^k[0]) >> 2) & 0x3f]^c_SPtrans[2][((r^k[0]) >> 10) & 0x3f]^c_SPtrans[4][((r^k[0]) >> 18) & 0x3f]^c_SPtrans[6][((r^k[0]) >> 26) & 0x3f]^c_SPtrans[1][((_rotr(r, 4)^k[1]) >> 2) & 0x3f]^c_SPtrans[3][((_rotr(r, 4)^k[1]) >> 10) & 0x3f]^c_SPtrans[5][((_rotr(r, 4)^k[1]) >> 18) & 0x3f]^c_SPtrans[7][((_rotr(r, 4)^k[1]) >> 26) & 0x3f])
+#define BYTE_SWAP_U32(n) \
+    (((n>>24)&0xff) | ((n<<8)&0xff0000) | ((n>>8)&0xff00) | ((n<<24)&0xff000000))
+#define MAKE_U64(n,m) \
+    ((n << 32) | (m & 0xffffffff))
+#define NIBBLE(a, n) \
+    ((a >> (60 - ((n & 0x0f) << 2))) & 0x0f)
+#define REVERSE_BITS(n) \
+    ((c_BitReverseTable256[n & 0xff] << 24) | \
+    (c_BitReverseTable256[(n >> 8) & 0xff] << 16) | \
+    (c_BitReverseTable256[(n >> 16) & 0xff] << 8) | \
+    (c_BitReverseTable256[(n >> 24) & 0xff]))
 
-typedef struct StuffItDESKeySchedule {
+#define ENCRYPT(l, r, k) \
+    (l ^= c_SPtrans[0][((r ^ k[0]) >> 2) & 0x3f] ^ \
+    c_SPtrans[2][((r ^ k[0]) >> 10) & 0x3f] ^ \
+    c_SPtrans[4][((r ^ k[0]) >> 18) & 0x3f] ^ \
+    c_SPtrans[6][((r ^ k[0]) >> 26) & 0x3f] ^ \
+    c_SPtrans[1][((_rotr(r, 4) ^ k[1]) >> 2) & 0x3f] ^ \
+    c_SPtrans[3][((_rotr(r, 4) ^ k[1]) >> 10) & 0x3f] ^ \
+    c_SPtrans[5][((_rotr(r, 4) ^ k[1]) >> 18) & 0x3f] ^ \
+    c_SPtrans[7][((_rotr(r, 4) ^ k[1]) >> 26) & 0x3f])
+    
+ #define SET_KEY1(k, n) \
+    (((NIBBLE(k, n) >> 2 | (NIBBLE(k, n + 13) << 2)) & 0x3f)   | \
+        (((NIBBLE(k, n + 11) >> 2 | (NIBBLE(k, n + 6) << 2)) & 0x3f) << 8)  | \
+        (((NIBBLE(k, n + 3) >> 2 | (NIBBLE(k, n + 10) << 2)) & 0x3f) << 16) | \
+        (((NIBBLE(k, n + 8) >> 2 | (NIBBLE(k, n + 1) << 2)) & 0x3f) << 24))
+
+#define SET_KEY0(k, n) \
+    (((NIBBLE(k, n + 9) | (NIBBLE(k, n) << 4)) & 0x3f)  | \
+    (((NIBBLE(k, n + 2) | (NIBBLE(k, n + 11) << 4)) & 0x3f) << 8)   | \
+    (((NIBBLE(k, n + 14) | (NIBBLE(k, n + 3) << 4)) & 0x3f) << 16)  | \
+    (((NIBBLE(k, n + 5) | (NIBBLE(k, n + 8) << 4)) & 0x3f) << 24))
+
+typedef struct StuffItDESKeySchedule
+{
 	u32 subKeys[16][2];
 } StuffItDESKeySchedule;
 
-const u8 BitReverseTable256[] = {
+const u8 c_BitReverseTable256[] =
+{
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
 	0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, 0x18, 0x98, 0x58, 0xd8, 0x38, 0xb8, 0x78, 0xf8,
 	0x04, 0x84, 0x44, 0xc4, 0x24, 0xa4, 0x64, 0xe4, 0x14, 0x94, 0x54, 0xd4, 0x34, 0xb4, 0x74, 0xf4,
@@ -44,7 +72,8 @@ const u8 BitReverseTable256[] = {
 	0x0f, 0x8f, 0x4f, 0xcf, 0x2f, 0xaf, 0x6f, 0xef, 0x1f, 0x9f, 0x5f, 0xdf, 0x3f, 0xbf, 0x7f, 0xff
 };
 
-CONSTANT_VK u32a c_SPtrans[8][64] = {
+CONSTANT_VK u32a c_SPtrans[8][64] =
+{
 	{
 		0x02080800, 0x00080000, 0x02000002, 0x02080802, 0x02000000, 0x00080802, 0x00080002, 0x02000002,
 		0x00080802, 0x02080800, 0x02080000, 0x00000802, 0x02000802, 0x02000000, 0x00000000, 0x00080002,
@@ -128,31 +157,97 @@ CONSTANT_VK u32a c_SPtrans[8][64] = {
 };
 
 
-DECLSPEC void StuffItDESSetKey(u64 key, StuffItDESKeySchedule *ks) {
-	for (u32 i = 0; i < 16; i++) {        
-        u32 subKey1 = ((NIBBLE(key, i) >> 2 | (NIBBLE(key, i + 13) << 2)) & 0x3f);
-		subKey1 |= ((NIBBLE(key, i + 11) >> 2 | (NIBBLE(key, i + 6) << 2)) & 0x3f) << 8;
-		subKey1 |= ((NIBBLE(key, i + 3) >> 2 | (NIBBLE(key, i + 10) << 2)) & 0x3f) << 16;
-		subKey1 |= ((NIBBLE(key, i + 8) >> 2 | (NIBBLE(key, i + 1) << 2)) & 0x3f) << 24;
-
-		u32 subKey0 = ((NIBBLE(key, i + 9) | (NIBBLE(key, i) << 4)) & 0x3f);
-		subKey0 |= ((NIBBLE(key, i + 2) | (NIBBLE(key, i + 11) << 4)) & 0x3f) << 8;
-		subKey0 |= ((NIBBLE(key, i + 14) | (NIBBLE(key, i + 3) << 4)) & 0x3f) << 16;
-		subKey0 |= ((NIBBLE(key, i + 5) | (NIBBLE(key, i + 8) << 4)) & 0x3f) << 24;
-
-		ks->subKeys[i][0] = REVERSE_BITS(subKey1);
-		ks->subKeys[i][1] = REVERSE_BITS(subKey0);
-	}
+DECLSPEC void StuffItDESSetKey(u64x key, StuffItDESKeySchedule *ks) {  
+    u32 subKey1 = SET_KEY1(key, 0);
+    u32 subKey0 = SET_KEY0(key, 0);
+    ks->subKeys[0][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[0][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 1);
+    subKey0 = SET_KEY0(key, 1);
+    ks->subKeys[1][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[1][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 2);
+    subKey0 = SET_KEY0(key, 2);
+    ks->subKeys[2][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[2][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 3);
+    subKey0 = SET_KEY0(key, 3);
+    ks->subKeys[3][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[3][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 4);
+    subKey0 = SET_KEY0(key, 4);
+    ks->subKeys[4][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[4][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 5);
+    subKey0 = SET_KEY0(key, 5);
+    ks->subKeys[5][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[5][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 6);
+    subKey0 = SET_KEY0(key, 6);
+    ks->subKeys[6][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[6][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 7);
+    subKey0 = SET_KEY0(key, 7);
+    ks->subKeys[7][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[7][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 8);
+    subKey0 = SET_KEY0(key, 8);
+    ks->subKeys[8][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[8][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 9);
+    subKey0 = SET_KEY0(key, 9);
+    ks->subKeys[9][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[9][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 10);
+    subKey0 = SET_KEY0(key, 10);
+    ks->subKeys[10][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[10][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 11);
+    subKey0 = SET_KEY0(key, 11);
+    ks->subKeys[11][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[11][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 12);
+    subKey0 = SET_KEY0(key, 12);
+    ks->subKeys[12][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[12][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 13);
+    subKey0 = SET_KEY0(key, 13);
+    ks->subKeys[13][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[13][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 14);
+    subKey0 = SET_KEY0(key, 14);
+    ks->subKeys[14][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[14][1] = REVERSE_BITS(subKey0);
+    
+    subKey1 = SET_KEY1(key, 15);
+    subKey0 = SET_KEY0(key, 15);
+    ks->subKeys[15][0] = REVERSE_BITS(subKey1);
+    ks->subKeys[15][1] = REVERSE_BITS(subKey0);
 }
 
-DECLSPEC void StuffItDESCrypt(u32 *data, StuffItDESKeySchedule *ks, u32 enc) {
-	u32 l = REVERSE_BITS(data[0]);
-	u32 r = REVERSE_BITS(data[1]);
+DECLSPEC void StuffItDESCrypt(u32a *data, StuffItDESKeySchedule *ks, u32 enc) {
+	u32x l = REVERSE_BITS(data[0]);
+	u32x r = REVERSE_BITS(data[1]);
 
 	r = _rotr(r, 29);
 	l = _rotr(l, 29);
 
-	if (enc) {
+	if (enc)
+    {
 		ENCRYPT(l, r, ks->subKeys[0]);
 		ENCRYPT(r, l, ks->subKeys[1]);
 		ENCRYPT(l, r, ks->subKeys[2]);
@@ -203,88 +298,116 @@ KERNEL_FQ void m90337_mxx (KERN_ATTR_RULES ())
 
 KERNEL_FQ void m90337_sxx (KERN_ATTR_RULES ())
 {
-  const u64 gid = get_global_id (0);
-  const u64 lid = get_local_id (0);
-  const u64 lsz = get_local_size (0);
-  
-  LOCAL_VK u32 s_SPtrans[8][64];
+    const u64 gid = get_global_id (0);
+    const u64 lid = get_local_id (0);
+    const u64 lsz = get_local_size (0);
 
-  for (u32 i = lid; i < 64; i += lsz)
-  {
-    s_SPtrans[0][i] = c_SPtrans[0][i];
-    s_SPtrans[1][i] = c_SPtrans[1][i];
-    s_SPtrans[2][i] = c_SPtrans[2][i];
-    s_SPtrans[3][i] = c_SPtrans[3][i];
-    s_SPtrans[4][i] = c_SPtrans[4][i];
-    s_SPtrans[5][i] = c_SPtrans[5][i];
-    s_SPtrans[6][i] = c_SPtrans[6][i];
-    s_SPtrans[7][i] = c_SPtrans[7][i];
-  }
+    LOCAL_VK u32 s_SPtrans[8][64];
 
-  SYNC_THREADS ();
-
-  if (gid >= gid_max) return;
-
-  COPY_PW (pws[gid]);
-  
-    #define IKEY1 0x01234567ULL
-    #define IKEY2 0x89abcdefULL
-
-    u64 ikey = MAKE_U64(IKEY1, IKEY2);
-  
-  for (u32 il_pos = 0; il_pos < il_cnt; il_pos += VECT_SIZE)
-  {
-    pw_t tmp = PASTE_PW;
-
-    tmp.pw_len = apply_rules (rules_buf[il_pos].cmds, tmp.i, tmp.pw_len);
-
-    u32 data[16];
-    u32 Kc[16];
-    u32 Kd[16];
-    u32 iv[2];
-    
-    StuffItDESKeySchedule keySchedule;
-    
-    StuffItDESSetKey(ikey, &keySchedule);
-    
-    for (u32 i = 0 ; i < (tmp.pw_len >> 2) + 1 ; i += 2) {
-        if (i > 1) {
-            data[0] ^= BYTE_SWAP_U32(tmp.i[i]);
-            data[1] ^= BYTE_SWAP_U32(tmp.i[i+1]);
-        } else {
-            data[0] = BYTE_SWAP_U32(tmp.i[i]) ^ IKEY1;
-            data[1] = BYTE_SWAP_U32(tmp.i[i+1]) ^ IKEY2;
-        }
-        
-        StuffItDESCrypt(data, &keySchedule, 1);
+    for (u32 i = lid; i < 64; i += lsz)
+    {
+        s_SPtrans[0][i] = c_SPtrans[0][i];
+        s_SPtrans[1][i] = c_SPtrans[1][i];
+        s_SPtrans[2][i] = c_SPtrans[2][i];
+        s_SPtrans[3][i] = c_SPtrans[3][i];
+        s_SPtrans[4][i] = c_SPtrans[4][i];
+        s_SPtrans[5][i] = c_SPtrans[5][i];
+        s_SPtrans[6][i] = c_SPtrans[6][i];
+        s_SPtrans[7][i] = c_SPtrans[7][i];
     }
-       
-    u64 dataKey = MAKE_U64((u64)data[0], (u64)data[1]);
-    u32 digest[2] = {
-        BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET].digest_buf[DGST_R0]),
-        BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET].digest_buf[DGST_R1])
-    };
     
-    StuffItDESSetKey(dataKey, &keySchedule);
-    StuffItDESCrypt(digest, &keySchedule, 0);
+    StuffItDESKeySchedule initKeySchedule;
     
-    u32 verify[2];
-    
-    verify[0] = digest[0];
-    verify[1] = 4;
-    
-    StuffItDESSetKey(dataKey, &keySchedule);
-    StuffItDESCrypt(verify, &keySchedule, 1);
+    initKeySchedule.subKeys[0][0] = 0x2c581460;
+    initKeySchedule.subKeys[0][1] = 0x904c7ca0;
+    initKeySchedule.subKeys[1][0] = 0x1cf8b450;
+    initKeySchedule.subKeys[1][1] = 0x58c0f068;
+    initKeySchedule.subKeys[2][0] = 0x3cc48c70;
+    initKeySchedule.subKeys[2][1] = 0xd42808e4;
+    initKeySchedule.subKeys[3][0] = 0x00e4ac48;
+    initKeySchedule.subKeys[3][1] = 0x3ca4841c;
+    initKeySchedule.subKeys[4][0] = 0xa0d49ce8;
+    initKeySchedule.subKeys[4][1] = 0xb06c4c90;
+    initKeySchedule.subKeys[5][0] = 0x90347cd8;
+    initKeySchedule.subKeys[5][1] = 0x78e0c058;
+    initKeySchedule.subKeys[6][0] = 0xb00c40f8;
+    initKeySchedule.subKeys[6][1] = 0xf41828d4;
+    initKeySchedule.subKeys[7][0] = 0x882c60c4;
+    initKeySchedule.subKeys[7][1] = 0x0c94a43c;
+    initKeySchedule.subKeys[8][0] = 0x681c5024;
+    initKeySchedule.subKeys[8][1] = 0x805c6cb0;
+    initKeySchedule.subKeys[9][0] = 0x58bcf014;
+    initKeySchedule.subKeys[9][1] = 0x48d0e078;
+    initKeySchedule.subKeys[10][0] = 0x7880c834;
+    initKeySchedule.subKeys[10][1] = 0xc43818f4;
+    initKeySchedule.subKeys[11][0] = 0x44a0e80c;
+    initKeySchedule.subKeys[11][1] = 0x2cb4940c;
+    initKeySchedule.subKeys[12][0] = 0xe490d8ac;
+    initKeySchedule.subKeys[12][1] = 0xa07c5c80;
+    initKeySchedule.subKeys[13][0] = 0xd470389c;
+    initKeySchedule.subKeys[13][1] = 0x68f0d048;
+    initKeySchedule.subKeys[14][0] = 0xf44804bc;
+    initKeySchedule.subKeys[14][1] = 0xe40838c4;
+    initKeySchedule.subKeys[15][0] = 0xcc682480;
+    initKeySchedule.subKeys[15][1] = 0x1c84b42c;
 
-    u32 z = 0;
-  
-    const u32 search[4] = {
-        digest[1],
-        0,
-        0,
-        0
-    };
+    SYNC_THREADS ();
 
-    COMPARE_S_SIMD (verify[1], z, z, z);
-  }
+    if (gid >= gid_max) return;
+
+    COPY_PW (pws[gid]);
+
+    for (u32 il_pos = 0; il_pos < il_cnt; il_pos += VECT_SIZE)
+    {
+        pw_t tmp = PASTE_PW;
+
+        tmp.pw_len = apply_rules (rules_buf[il_pos].cmds, tmp.i, tmp.pw_len);
+
+        u32a data[16];
+        
+        #define IKEY1 0x01234567ULL
+        #define IKEY2 0x89abcdefULL
+
+        for (u32 i = 0 ; i < (tmp.pw_len >> 2) + 1 ; i += 2)
+        {
+            if (i > 1) {
+                data[0] ^= BYTE_SWAP_U32(tmp.i[i]);
+                data[1] ^= BYTE_SWAP_U32(tmp.i[i + 1]);
+            } else {
+                data[0] = BYTE_SWAP_U32(tmp.i[i]) ^ IKEY1;
+                data[1] = BYTE_SWAP_U32(tmp.i[i + 1]) ^ IKEY2;
+            }
+            
+            StuffItDESCrypt(data, &initKeySchedule, 1);
+        }
+           
+        StuffItDESKeySchedule keySchedule;
+        u64x dataKey = MAKE_U64((u64)data[0], (u64)data[1]);
+        u32a digest[2] =
+        {
+            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET].digest_buf[DGST_R0]),
+            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET].digest_buf[DGST_R1])
+        };
+                
+        StuffItDESSetKey(dataKey, &keySchedule);
+        StuffItDESCrypt(digest, &keySchedule, 0);
+
+        u32a verify[2];
+
+        verify[0] = digest[0];
+        verify[1] = 4;
+
+        StuffItDESSetKey(dataKey, &keySchedule);
+        StuffItDESCrypt(verify, &keySchedule, 1);
+
+        const u32 search[4] =
+        {
+            digest[1],
+            0,
+            0,
+            0
+        };
+
+        COMPARE_S_SIMD (verify[1], 0, 0, 0);
+    }
 }
