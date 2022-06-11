@@ -158,8 +158,8 @@ CONSTANT_VK u32a c_SPtrans[8][64] =
 
 
 DECLSPEC void StuffItDESSetKey(u64x key, StuffItDESKeySchedule *ks) {  
-    u32 subKey1 = SET_KEY1(key, 0);
-    u32 subKey0 = SET_KEY0(key, 0);
+    u32x subKey1 = SET_KEY1(key, 0);
+    u32x subKey0 = SET_KEY0(key, 0);
     ks->subKeys[0][0] = REVERSE_BITS(subKey1);
     ks->subKeys[0][1] = REVERSE_BITS(subKey0);
     
