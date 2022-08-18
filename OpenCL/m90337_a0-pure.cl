@@ -30,10 +30,10 @@
     c_SPtrans[2][((r ^ k[0]) >> 10) & 0x3f] ^ \
     c_SPtrans[4][((r ^ k[0]) >> 18) & 0x3f] ^ \
     c_SPtrans[6][((r ^ k[0]) >> 26) & 0x3f] ^ \
-    c_SPtrans[1][((_rotr(r, 4) ^ k[1]) >> 2) & 0x3f] ^ \
-    c_SPtrans[3][((_rotr(r, 4) ^ k[1]) >> 10) & 0x3f] ^ \
-    c_SPtrans[5][((_rotr(r, 4) ^ k[1]) >> 18) & 0x3f] ^ \
-    c_SPtrans[7][((_rotr(r, 4) ^ k[1]) >> 26) & 0x3f])
+    c_SPtrans[1][((hc_rotr32(r, 4) ^ k[1]) >> 2) & 0x3f] ^ \
+    c_SPtrans[3][((hc_rotr32(r, 4) ^ k[1]) >> 10) & 0x3f] ^ \
+    c_SPtrans[5][((hc_rotr32(r, 4) ^ k[1]) >> 18) & 0x3f] ^ \
+    c_SPtrans[7][((hc_rotr32(r, 4) ^ k[1]) >> 26) & 0x3f])
     
  #define SET_KEY1(k, n) \
     (((NIBBLE(k, n) >> 2 | (NIBBLE(k, n + 13) << 2)) & 0x3f)   | \
@@ -52,7 +52,7 @@ typedef struct StuffItDESKeySchedule
 	u32a subKeys[16][2];
 } StuffItDESKeySchedule;
 
-const u8 c_BitReverseTable256[] =
+CONSTANT_VK u8 c_BitReverseTable256[] =
 {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
 	0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, 0x18, 0x98, 0x58, 0xd8, 0x38, 0xb8, 0x78, 0xf8,
@@ -243,8 +243,8 @@ DECLSPEC void StuffItDESCrypt(u32a *data, StuffItDESKeySchedule *ks, u32 enc) {
 	u32x l = REVERSE_BITS(data[0]);
 	u32x r = REVERSE_BITS(data[1]);
 
-	r = _rotr(r, 29);
-	l = _rotr(l, 29);
+	r = hc_rotr32(r, 29);
+	l = hc_rotr32(l, 29);
 
 	if (enc)
     {
@@ -284,8 +284,8 @@ DECLSPEC void StuffItDESCrypt(u32a *data, StuffItDESKeySchedule *ks, u32 enc) {
 		ENCRYPT(r, l, ks->subKeys[0]);
 	}
 
-	l = _rotr(l, 3);
-	r = _rotr(r, 3);
+	l = hc_rotr32(l, 3);
+	r = hc_rotr32(r, 3);
 
 	data[0] = REVERSE_BITS(r);
 	data[1] = REVERSE_BITS(l);
