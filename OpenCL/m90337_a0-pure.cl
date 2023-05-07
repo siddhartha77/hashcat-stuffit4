@@ -3,14 +3,16 @@
  * License.....: MIT
  */
 
+//#define NEW_SIMD_CODE
+
 #ifdef KERNEL_STATIC
-#include "inc_vendor.h"
-#include "inc_types.h"
-#include "inc_platform.cl"
-#include "inc_common.cl"
-#include "inc_rp.h"
-#include "inc_rp.cl"
-#include "inc_simd.cl"
+#include M2S(INCLUDE_PATH/inc_vendor.h)
+#include M2S(INCLUDE_PATH/inc_types.h)
+#include M2S(INCLUDE_PATH/inc_platform.cl)
+#include M2S(INCLUDE_PATH/inc_common.cl)
+#include M2S(INCLUDE_PATH/inc_rp.h)
+#include M2S(INCLUDE_PATH/inc_rp.cl)
+#include M2S(INCLUDE_PATH/inc_simd.cl)
 #endif
 
 #define BYTE_SWAP_U32(n) \
@@ -340,11 +342,11 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_RULES ())
 
     SYNC_THREADS ();
 
-    if (gid >= gid_max) return;
+    if (gid >= GID_CNT) return;
 
     COPY_PW (pws[gid]);
 
-    for (u32 il_pos = 0; il_pos < il_cnt; il_pos += VECT_SIZE)
+    for (u32 il_pos = 0; il_pos < IL_CNT; il_pos += VECT_SIZE)
     {
         pw_t tmp = PASTE_PW;
 
@@ -372,8 +374,8 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_RULES ())
         u64x dataKey = MAKE_U64((u64)data[0], (u64)data[1]);
         u32a digest[2] =
         {
-            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET].digest_buf[DGST_R0]),
-            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET].digest_buf[DGST_R1])
+            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST].digest_buf[DGST_R0]),
+            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST].digest_buf[DGST_R1])
         };
                 
         StuffItDESSetKey(dataKey, &keySchedule);
