@@ -484,7 +484,6 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_VECTOR ())
     for (u32 il_pos = 0; il_pos < IL_CNT; il_pos += VECT_SIZE)
     {
         const u32x w0r = words_buf_r[il_pos / VECT_SIZE];
-
         const u32x w0 = w0l | w0r;
 
         w[0] = w0;
@@ -526,14 +525,14 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_VECTOR ())
         StuffItDESSetKey(dataKey, &keySchedule);
         StuffItDESCrypt(verify, &keySchedule, 1);
 
-        const u32 search[4] =
+        if (verify[1] == digest[1])
         {
-            digest[1],
-            0,
-            0,
-            0
-        };
+            const u32 final_hash_pos = DIGESTS_OFFSET_HOST + 0;
 
-        COMPARE_S_SIMD (verify[1], 0, 0, 0);
+            if (hc_atomic_inc (&hashes_shown[final_hash_pos]) == 0)
+            {
+                mark_hash (plains_buf, d_return_buf, SALT_POS_HOST, DIGESTS_CNT, 0, final_hash_pos, gid, il_pos, 0, 0);
+            }
+        }
     }
 }
