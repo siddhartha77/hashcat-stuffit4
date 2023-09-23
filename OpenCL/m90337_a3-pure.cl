@@ -295,7 +295,127 @@ DECLSPEC void StuffItDESCrypt(u32a *data, StuffItDESKeySchedule *ks, u32 enc) {
 
 KERNEL_FQ void m90337_mxx (KERN_ATTR_VECTOR ())
 {
-  // no support
+    const u64 gid = get_global_id (0);
+    const u64 lid = get_local_id (0);
+    const u64 lsz = get_local_size (0);
+    
+    if (gid >= GID_CNT) return;
+
+    LOCAL_VK u32 s_SPtrans[8][64];
+
+    for (u32 i = lid; i < 64; i += lsz)
+    {
+        s_SPtrans[0][i] = c_SPtrans[0][i];
+        s_SPtrans[1][i] = c_SPtrans[1][i];
+        s_SPtrans[2][i] = c_SPtrans[2][i];
+        s_SPtrans[3][i] = c_SPtrans[3][i];
+        s_SPtrans[4][i] = c_SPtrans[4][i];
+        s_SPtrans[5][i] = c_SPtrans[5][i];
+        s_SPtrans[6][i] = c_SPtrans[6][i];
+        s_SPtrans[7][i] = c_SPtrans[7][i];
+    }
+    
+    struct StuffItDESKeySchedule initialKeySchedule =
+    {
+        {
+            {0x2c581460, 0x904c7ca0},
+            {0x1cf8b450, 0x58c0f068},
+            {0x3cc48c70, 0xd42808e4},
+            {0x00e4ac48, 0x3ca4841c},
+            {0xa0d49ce8, 0xb06c4c90},
+            {0x90347cd8, 0x78e0c058},
+            {0xb00c40f8, 0xf41828d4},
+            {0x882c60c4, 0x0c94a43c},
+            {0x681c5024, 0x805c6cb0},
+            {0x58bcf014, 0x48d0e078},
+            {0x7880c834, 0xc43818f4},
+            {0x44a0e80c, 0x2cb4940c},
+            {0xe490d8ac, 0xa07c5c80},
+            {0xd470389c, 0x68f0d048},
+            {0xf44804bc, 0xe40838c4},
+            {0xcc682480, 0x1c84b42c}
+        }
+    };
+    
+    /**
+    * base
+    */
+
+    const u32 pw_len = pws[gid].pw_len;
+
+    u32x w[64] = { 0 };
+
+    for (u32 i = 0, idx = 0; i < pw_len; i += 4, idx += 1)
+    {
+        w[idx] = pws[gid].i[idx];
+    }
+
+    /**
+    * loop
+    */
+
+    u32x w0l = w[0];
+
+    for (u32 il_pos = 0; il_pos < IL_CNT; il_pos += VECT_SIZE)
+    {
+        const u32x w0r = words_buf_r[il_pos / VECT_SIZE];
+
+        const u32x w0 = w0l | w0r;
+
+        w[0] = w0;
+        
+        u32a data[16];
+        
+        #define IKEY1 0x01234567ULL
+        #define IKEY2 0x89abcdefULL
+        
+        for (u32 i = 0 ; i < (pw_len >> 2) + 1 ; i += 2)
+        {
+            if (i > 1) {
+                data[0] ^= w[i];
+                data[1] ^= w[i + 1];
+            } else {
+                data[0] = w[i] ^ IKEY1;
+                data[1] = w[i + 1] ^ IKEY2;
+            }
+            
+            StuffItDESCrypt(data, &initialKeySchedule, 1);
+        }
+           
+        StuffItDESKeySchedule keyScheduleInitial;
+        StuffItDESKeySchedule keyScheduleTest;
+        u64x dataKey = MAKE_U64((u64)data[0], (u64)data[1]);
+                
+        StuffItDESSetKey(dataKey, &keyScheduleInitial);
+        
+        for (u32 i = 0 ; i < DIGESTS_CNT ; ++i)
+        {
+            keyScheduleTest = keyScheduleInitial;
+            u32a digest[2] =
+            {
+                BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST + i].digest_buf[DGST_R0]),
+                BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST + i].digest_buf[DGST_R1])
+            };
+            StuffItDESCrypt(digest, &keyScheduleTest, 0);
+
+            u32a verify[2];
+            
+            verify[0] = digest[0];
+            verify[1] = 4;
+            StuffItDESSetKey(dataKey, &keyScheduleTest);
+            StuffItDESCrypt(verify, &keyScheduleTest, 1);
+            
+            if (digest[1] == verify[1])
+            {
+                const u32 final_hash_pos = DIGESTS_OFFSET_HOST + i;
+                
+                if (vector_accessible (il_pos, IL_CNT, 0) && (hc_atomic_inc (&hashes_shown[final_hash_pos]) == 0))
+                {
+                    mark_hash (plains_buf, d_return_buf, SALT_POS_HOST, DIGESTS_CNT, i, final_hash_pos, gid, il_pos + 0, 0, 0);
+                }
+            }
+        }
+    }
 }
 
 KERNEL_FQ void m90337_sxx (KERN_ATTR_VECTOR ())
