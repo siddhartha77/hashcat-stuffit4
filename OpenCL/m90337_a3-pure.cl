@@ -26,22 +26,26 @@
     (c_BitReverseTable256[(n >> 8) & 0xff] << 16) | \
     (c_BitReverseTable256[(n >> 16) & 0xff] << 8) | \
     (c_BitReverseTable256[(n >> 24) & 0xff]))
-
+	
 #define ENCRYPT(l, r, k) \
-    (l ^= c_SPtrans[0][((r ^ k[0]) >> 2) & 0x3f] ^ \
-    c_SPtrans[2][((r ^ k[0]) >> 10) & 0x3f] ^ \
-    c_SPtrans[4][((r ^ k[0]) >> 18) & 0x3f] ^ \
-    c_SPtrans[6][((r ^ k[0]) >> 26) & 0x3f] ^ \
-    c_SPtrans[1][((hc_rotr32(r, 4) ^ k[1]) >> 2) & 0x3f] ^ \
-    c_SPtrans[3][((hc_rotr32(r, 4) ^ k[1]) >> 10) & 0x3f] ^ \
-    c_SPtrans[5][((hc_rotr32(r, 4) ^ k[1]) >> 18) & 0x3f] ^ \
-    c_SPtrans[7][((hc_rotr32(r, 4) ^ k[1]) >> 26) & 0x3f])
+  do { \
+    const u32x x1 = (r) ^ (k)[0]; \
+    const u32x x2 = hc_rotr32((r), 4) ^ (k)[1]; \
+    (l) ^= c_SPtrans[0][(x1 >>  2) & 0x3f] ^ \
+           c_SPtrans[2][(x1 >> 10) & 0x3f] ^ \
+           c_SPtrans[4][(x1 >> 18) & 0x3f] ^ \
+           c_SPtrans[6][(x1 >> 26) & 0x3f] ^ \
+           c_SPtrans[1][(x2 >>  2) & 0x3f] ^ \
+           c_SPtrans[3][(x2 >> 10) & 0x3f] ^ \
+           c_SPtrans[5][(x2 >> 18) & 0x3f] ^ \
+           c_SPtrans[7][(x2 >> 26) & 0x3f]; \
+  } while (0)
     
  #define SET_KEY1(k, n) \
     (((NIBBLE(k, n) >> 2 | (NIBBLE(k, n + 13) << 2)) & 0x3f)   | \
-        (((NIBBLE(k, n + 11) >> 2 | (NIBBLE(k, n + 6) << 2)) & 0x3f) << 8)  | \
-        (((NIBBLE(k, n + 3) >> 2 | (NIBBLE(k, n + 10) << 2)) & 0x3f) << 16) | \
-        (((NIBBLE(k, n + 8) >> 2 | (NIBBLE(k, n + 1) << 2)) & 0x3f) << 24))
+	(((NIBBLE(k, n + 11) >> 2 | (NIBBLE(k, n + 6) << 2)) & 0x3f) << 8)  | \
+	(((NIBBLE(k, n + 3) >> 2 | (NIBBLE(k, n + 10) << 2)) & 0x3f) << 16) | \
+	(((NIBBLE(k, n + 8) >> 2 | (NIBBLE(k, n + 1) << 2)) & 0x3f) << 24))
 
 #define SET_KEY0(k, n) \
     (((NIBBLE(k, n + 9) | (NIBBLE(k, n) << 4)) & 0x3f)  | \
@@ -49,12 +53,66 @@
     (((NIBBLE(k, n + 14) | (NIBBLE(k, n + 3) << 4)) & 0x3f) << 16)  | \
     (((NIBBLE(k, n + 5) | (NIBBLE(k, n + 8) << 4)) & 0x3f) << 24))
 
+#define UNROLL_LOOP _Pragma("unroll")
+
+#define DESENCRYPT(p0,p1,ks) \
+  do { \
+		u32x l = hc_rotr32(REVERSE_BITS(p0), 29); \
+		u32x r = hc_rotr32(REVERSE_BITS(p1), 29); \
+		UNROLL_LOOP \
+		for (int i = 0 ; i < 16 ; i += 2) { \
+			ENCRYPT(l, r, (ks)->subKeys[i]); \
+			ENCRYPT(r, l, (ks)->subKeys[i+1]); \
+		} \
+		l = hc_rotr32(l, 3); \
+		r = hc_rotr32(r, 3); \
+		p0 = REVERSE_BITS(r); \
+		p1 = REVERSE_BITS(l); \
+  } while (0)
+
+#define DESDECRYPT(d0,d1,ks) \
+  do { \
+		u32x l = hc_rotr32(REVERSE_BITS(d0), 29); \
+		u32x r = hc_rotr32(REVERSE_BITS(d1), 29); \
+		UNROLL_LOOP \
+		for (int i = 15 ; i >= 0 ; i -= 2) { \
+			ENCRYPT(l, r, (ks)->subKeys[i]); \
+			ENCRYPT(r, l, (ks)->subKeys[i-1]); \
+		} \
+		l = hc_rotr32(l, 3); \
+		r = hc_rotr32(r, 3); \
+		d0 = REVERSE_BITS(r); \
+		d1 = REVERSE_BITS(l); \
+  } while (0)
+
 typedef struct StuffItDESKeySchedule
 {
 	u32a subKeys[16][2];
 } StuffItDESKeySchedule;
 
-CONSTANT_VK u8 c_BitReverseTable256[] =
+CONSTANT_VK StuffItDESKeySchedule c_InitialKeySchedule =
+{
+	{
+		{0x2c581460, 0x904c7ca0},
+		{0x1cf8b450, 0x58c0f068},
+		{0x3cc48c70, 0xd42808e4},
+		{0x00e4ac48, 0x3ca4841c},
+		{0xa0d49ce8, 0xb06c4c90},
+		{0x90347cd8, 0x78e0c058},
+		{0xb00c40f8, 0xf41828d4},
+		{0x882c60c4, 0x0c94a43c},
+		{0x681c5024, 0x805c6cb0},
+		{0x58bcf014, 0x48d0e078},
+		{0x7880c834, 0xc43818f4},
+		{0x44a0e80c, 0x2cb4940c},
+		{0xe490d8ac, 0xa07c5c80},
+		{0xd470389c, 0x68f0d048},
+		{0xf44804bc, 0xe40838c4},
+		{0xcc682480, 0x1c84b42c}
+	}
+};
+
+CONSTANT_VK u8a c_BitReverseTable256[] =
 {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
 	0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, 0x18, 0x98, 0x58, 0xd8, 0x38, 0xb8, 0x78, 0xf8,
@@ -158,7 +216,7 @@ CONSTANT_VK u32a c_SPtrans[8][64] =
 	}
 };
 
-
+/* Faster as a function than as an unrolled macro */
 DECLSPEC void StuffItDESSetKey(u64x key, StuffItDESKeySchedule *ks) {  
     u32x subKey1 = SET_KEY1(key, 0);
     u32x subKey0 = SET_KEY0(key, 0);
@@ -241,105 +299,11 @@ DECLSPEC void StuffItDESSetKey(u64x key, StuffItDESKeySchedule *ks) {
     ks->subKeys[15][1] = REVERSE_BITS(subKey0);
 }
 
-DECLSPEC void StuffItDESCrypt(u32a *data, StuffItDESKeySchedule *ks, u32 enc) {
-	u32x l = REVERSE_BITS(data[0]);
-	u32x r = REVERSE_BITS(data[1]);
-
-	r = hc_rotr32(r, 29);
-	l = hc_rotr32(l, 29);
-
-	if (enc)
-    {
-		ENCRYPT(l, r, ks->subKeys[0]);
-		ENCRYPT(r, l, ks->subKeys[1]);
-		ENCRYPT(l, r, ks->subKeys[2]);
-		ENCRYPT(r, l, ks->subKeys[3]);
-		ENCRYPT(l, r, ks->subKeys[4]);
-		ENCRYPT(r, l, ks->subKeys[5]);
-		ENCRYPT(l, r, ks->subKeys[6]);
-		ENCRYPT(r, l, ks->subKeys[7]);
-		ENCRYPT(l, r, ks->subKeys[8]);
-		ENCRYPT(r, l, ks->subKeys[9]);
-		ENCRYPT(l, r, ks->subKeys[10]);
-		ENCRYPT(r, l, ks->subKeys[11]);
-		ENCRYPT(l, r, ks->subKeys[12]);
-		ENCRYPT(r, l, ks->subKeys[13]);
-		ENCRYPT(l, r, ks->subKeys[14]);
-		ENCRYPT(r, l, ks->subKeys[15]);
-	}
-	else  {
-		ENCRYPT(l, r, ks->subKeys[15]);
-		ENCRYPT(r, l, ks->subKeys[14]);
-		ENCRYPT(l, r, ks->subKeys[13]);
-		ENCRYPT(r, l, ks->subKeys[12]);
-		ENCRYPT(l, r, ks->subKeys[11]);
-		ENCRYPT(r, l, ks->subKeys[10]);
-		ENCRYPT(l, r, ks->subKeys[9]);
-		ENCRYPT(r, l, ks->subKeys[8]);
-		ENCRYPT(l, r, ks->subKeys[7]);
-		ENCRYPT(r, l, ks->subKeys[6]);
-		ENCRYPT(l, r, ks->subKeys[5]);
-		ENCRYPT(r, l, ks->subKeys[4]);
-		ENCRYPT(l, r, ks->subKeys[3]);
-		ENCRYPT(r, l, ks->subKeys[2]);
-		ENCRYPT(l, r, ks->subKeys[1]);
-		ENCRYPT(r, l, ks->subKeys[0]);
-	}
-
-	l = hc_rotr32(l, 3);
-	r = hc_rotr32(r, 3);
-
-	data[0] = REVERSE_BITS(r);
-	data[1] = REVERSE_BITS(l);
-}
-
-KERNEL_FQ void m90337_mxx (KERN_ATTR_VECTOR ())
+KERNEL_FQ KERNEL_FA void m90337_mxx (KERN_ATTR_VECTOR ())
 {
     const u64 gid = get_global_id (0);
-    const u64 lid = get_local_id (0);
-    const u64 lsz = get_local_size (0);
-    
+	
     if (gid >= GID_CNT) return;
-
-    LOCAL_VK u32 s_SPtrans[8][64];
-
-    for (u32 i = lid; i < 64; i += lsz)
-    {
-        s_SPtrans[0][i] = c_SPtrans[0][i];
-        s_SPtrans[1][i] = c_SPtrans[1][i];
-        s_SPtrans[2][i] = c_SPtrans[2][i];
-        s_SPtrans[3][i] = c_SPtrans[3][i];
-        s_SPtrans[4][i] = c_SPtrans[4][i];
-        s_SPtrans[5][i] = c_SPtrans[5][i];
-        s_SPtrans[6][i] = c_SPtrans[6][i];
-        s_SPtrans[7][i] = c_SPtrans[7][i];
-    }
-    
-    struct StuffItDESKeySchedule initialKeySchedule =
-    {
-        {
-            {0x2c581460, 0x904c7ca0},
-            {0x1cf8b450, 0x58c0f068},
-            {0x3cc48c70, 0xd42808e4},
-            {0x00e4ac48, 0x3ca4841c},
-            {0xa0d49ce8, 0xb06c4c90},
-            {0x90347cd8, 0x78e0c058},
-            {0xb00c40f8, 0xf41828d4},
-            {0x882c60c4, 0x0c94a43c},
-            {0x681c5024, 0x805c6cb0},
-            {0x58bcf014, 0x48d0e078},
-            {0x7880c834, 0xc43818f4},
-            {0x44a0e80c, 0x2cb4940c},
-            {0xe490d8ac, 0xa07c5c80},
-            {0xd470389c, 0x68f0d048},
-            {0xf44804bc, 0xe40838c4},
-            {0xcc682480, 0x1c84b42c}
-        }
-    };
-    
-    /**
-    * base
-    */
 
     const u32 pw_len = pws[gid].pw_len;
 
@@ -349,12 +313,8 @@ KERNEL_FQ void m90337_mxx (KERN_ATTR_VECTOR ())
     {
         w[idx] = pws[gid].i[idx];
     }
-
-    /**
-    * loop
-    */
-
-    u32x w0l = w[0];
+	
+	u32x w0l = w[0];
 
     for (u32 il_pos = 0; il_pos < IL_CNT; il_pos += VECT_SIZE)
     {
@@ -364,48 +324,51 @@ KERNEL_FQ void m90337_mxx (KERN_ATTR_VECTOR ())
 
         w[0] = w0;
         
-        u32a data[16];
+		const u32 blocks = (pw_len + 7) / 8;
         
         #define IKEY1 0x01234567ULL
         #define IKEY2 0x89abcdefULL
+		
+		u32x p0 = w[0] ^ IKEY1;
+		u32x p1 = w[1] ^ IKEY2;
+
+		DESENCRYPT(p0, p1, &c_InitialKeySchedule);
+
+		for (u32 b = 1; b < blocks; b++)
+		{
+		  const u32 idx = b * 2;
+
+		  p0 ^= w[idx];
+		  p1 ^= w[idx+1];
+
+		  DESENCRYPT(p0, p1, &c_InitialKeySchedule);
+		}
         
-        for (u32 i = 0 ; i < (pw_len >> 2) + 1 ; i += 2)
-        {
-            if (i > 1) {
-                data[0] ^= w[i];
-                data[1] ^= w[i + 1];
-            } else {
-                data[0] = w[i] ^ IKEY1;
-                data[1] = w[i + 1] ^ IKEY2;
-            }
-            
-            StuffItDESCrypt(data, &initialKeySchedule, 1);
-        }
-           
-        StuffItDESKeySchedule keyScheduleInitial;
-        StuffItDESKeySchedule keyScheduleTest;
-        u64x dataKey = MAKE_U64((u64)data[0], (u64)data[1]);
+		StuffItDESKeySchedule ks;
+        u64x dataKey = MAKE_U64((u64)p0, (u64)p1);
                 
-        StuffItDESSetKey(dataKey, &keyScheduleInitial);
-        
+		StuffItDESSetKey(dataKey, &ks);
+		
         for (u32 i = 0 ; i < DIGESTS_CNT ; ++i)
         {
-            keyScheduleTest = keyScheduleInitial;
-            u32a digest[2] =
-            {
-                BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST + i].digest_buf[DGST_R0]),
-                BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST + i].digest_buf[DGST_R1])
-            };
-            StuffItDESCrypt(digest, &keyScheduleTest, 0);
+            u32x d0 = digests_buf[DIGESTS_OFFSET_HOST + i].digest_buf[DGST_R0];
+            u32x d1 = digests_buf[DIGESTS_OFFSET_HOST + i].digest_buf[DGST_R1];
+            
+			DESDECRYPT(d0, d1, &ks);
+			
+			d0 = hc_rotr32(REVERSE_BITS(d0), 29);
+			u32x r = 1;
 
-            u32a verify[2];
-            
-            verify[0] = digest[0];
-            verify[1] = 4;
-            StuffItDESSetKey(dataKey, &keyScheduleTest);
-            StuffItDESCrypt(verify, &keyScheduleTest, 1);
-            
-            if (digest[1] == verify[1])
+			UNROLL_LOOP
+			for (u32 j = 0; j < 16; j += 2)
+			{
+				ENCRYPT(d0, r, ks.subKeys[j]);
+				ENCRYPT(r, d0, ks.subKeys[j + 1]);
+			}
+
+			d0 = REVERSE_BITS(hc_rotr32(d0, 3));
+			
+			if (d0 == d1)
             {
                 const u32 final_hash_pos = DIGESTS_OFFSET_HOST + i;
                 
@@ -418,54 +381,14 @@ KERNEL_FQ void m90337_mxx (KERN_ATTR_VECTOR ())
     }
 }
 
-KERNEL_FQ void m90337_sxx (KERN_ATTR_VECTOR ())
+KERNEL_FQ KERNEL_FA void m90337_sxx (KERN_ATTR_VECTOR ())
 {
     const u64 gid = get_global_id (0);
-    const u64 lid = get_local_id (0);
-    const u64 lsz = get_local_size (0);
-    
+	
     if (gid >= GID_CNT) return;
-
-    LOCAL_VK u32 s_SPtrans[8][64];
-
-    for (u32 i = lid; i < 64; i += lsz)
-    {
-        s_SPtrans[0][i] = c_SPtrans[0][i];
-        s_SPtrans[1][i] = c_SPtrans[1][i];
-        s_SPtrans[2][i] = c_SPtrans[2][i];
-        s_SPtrans[3][i] = c_SPtrans[3][i];
-        s_SPtrans[4][i] = c_SPtrans[4][i];
-        s_SPtrans[5][i] = c_SPtrans[5][i];
-        s_SPtrans[6][i] = c_SPtrans[6][i];
-        s_SPtrans[7][i] = c_SPtrans[7][i];
-    }
-    
-    struct StuffItDESKeySchedule initialKeySchedule =
-    {
-        {
-            {0x2c581460, 0x904c7ca0},
-            {0x1cf8b450, 0x58c0f068},
-            {0x3cc48c70, 0xd42808e4},
-            {0x00e4ac48, 0x3ca4841c},
-            {0xa0d49ce8, 0xb06c4c90},
-            {0x90347cd8, 0x78e0c058},
-            {0xb00c40f8, 0xf41828d4},
-            {0x882c60c4, 0x0c94a43c},
-            {0x681c5024, 0x805c6cb0},
-            {0x58bcf014, 0x48d0e078},
-            {0x7880c834, 0xc43818f4},
-            {0x44a0e80c, 0x2cb4940c},
-            {0xe490d8ac, 0xa07c5c80},
-            {0xd470389c, 0x68f0d048},
-            {0xf44804bc, 0xe40838c4},
-            {0xcc682480, 0x1c84b42c}
-        }
-    };
-    
-    /**
-    * base
-    */
-
+	
+	const u32 search_d0 = digests_buf[DIGESTS_OFFSET_HOST].digest_buf[DGST_R0];
+	const u32 search_d1 = digests_buf[DIGESTS_OFFSET_HOST].digest_buf[DGST_R1];
     const u32 pw_len = pws[gid].pw_len;
 
     u32x w[64] = { 0 };
@@ -474,11 +397,7 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_VECTOR ())
     {
         w[idx] = pws[gid].i[idx];
     }
-
-    /**
-    * loop
-    */
-
+	
     u32x w0l = w[0];
 
     for (u32 il_pos = 0; il_pos < IL_CNT; il_pos += VECT_SIZE)
@@ -487,45 +406,48 @@ KERNEL_FQ void m90337_sxx (KERN_ATTR_VECTOR ())
         const u32x w0 = w0l | w0r;
 
         w[0] = w0;
-        
-        u32a data[16];
+		
+		const u32 blocks = (pw_len + 7) / 8;
         
         #define IKEY1 0x01234567ULL
         #define IKEY2 0x89abcdefULL
-        
-        for (u32 i = 0 ; i < (pw_len >> 2) + 1 ; i += 2)
-        {
-            if (i > 1) {
-                data[0] ^= w[i];
-                data[1] ^= w[i + 1];
-            } else {
-                data[0] = w[i] ^ IKEY1;
-                data[1] = w[i + 1] ^ IKEY2;
-            }
-            
-            StuffItDESCrypt(data, &initialKeySchedule, 1);
-        }
+		
+		u32x p0 = w[0] ^ IKEY1;
+		u32x p1 = w[1] ^ IKEY2;
+
+		DESENCRYPT(p0, p1, &c_InitialKeySchedule);
+
+		for (u32 b = 1; b < blocks; b++)
+		{
+		  const u32 idx = b * 2;
+
+		  p0 ^= w[idx];
+		  p1 ^= w[idx+1];
+
+		  DESENCRYPT(p0, p1, &c_InitialKeySchedule);
+		}
            
-        StuffItDESKeySchedule keySchedule;
-        u64x dataKey = MAKE_U64((u64)data[0], (u64)data[1]);
-        u32a digest[2] =
-        {
-            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST].digest_buf[DGST_R0]),
-            BYTE_SWAP_U32(digests_buf[DIGESTS_OFFSET_HOST].digest_buf[DGST_R1])
-        };
+        StuffItDESKeySchedule ks;
+        u64x dataKey = MAKE_U64((u64)p0, (u64)p1);
+		u32x d0 = search_d0;
+		u32x d1 = search_d1;
                 
-        StuffItDESSetKey(dataKey, &keySchedule);
-        StuffItDESCrypt(digest, &keySchedule, 0);
+        StuffItDESSetKey(dataKey, &ks);
+		DESDECRYPT(d0, d1, &ks);
+		
+		d0 = hc_rotr32(REVERSE_BITS(d0), 29);
+		u32x r = 1;
 
-        u32a verify[2];
+		UNROLL_LOOP
+		for (u32 i = 0; i < 16; i += 2)
+		{
+			ENCRYPT(d0, r, ks.subKeys[i]);
+			ENCRYPT(r, d0, ks.subKeys[i + 1]);
+		}
 
-        verify[0] = digest[0];
-        verify[1] = 4;
+		d0 = REVERSE_BITS(hc_rotr32(d0, 3));
 
-        StuffItDESSetKey(dataKey, &keySchedule);
-        StuffItDESCrypt(verify, &keySchedule, 1);
-
-        if (verify[1] == digest[1])
+		if (d0 == d1)
         {
             const u32 final_hash_pos = DIGESTS_OFFSET_HOST + 0;
 
