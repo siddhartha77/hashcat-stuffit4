@@ -11,4 +11,4 @@ Get the hash to crack from the MKey resource of the StuffIt archive.
 
 ## pass2unstuff.sh
 
-This script will utilize the unstuff CLI from [StuffIt Deluxe 2011](https://macintoshgarden.org/apps/stuffit-deluxe-2011-v1504) to try passwords from a list against an archive. Useful for sifting through all the false positives hashcat will generate.
+This script will utilize the unstuff CLI from StuffIt 2010 (version 14) to try passwords from a list against an archive. Useful for sifting through all the false positives hashcat will generate.
